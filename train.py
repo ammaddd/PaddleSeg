@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from comet_ml import Experiment
 import argparse
 
 import paddle
@@ -95,6 +96,9 @@ def parse_args():
 
 
 def main(args):
+    experiment = Experiment(auto_metric_logging=False)
+    experiment.log_others(vars(args))
+    experiment.log_code("./paddleseg/core/train.py")
     env_info = get_sys_env()
     info = ['{}: {}'.format(k, v) for k, v in env_info.items()]
     info = '\n'.join(['', format('Environment Information', '-^48s')] + info +
@@ -107,6 +111,8 @@ def main(args):
     paddle.set_device(place)
     if not args.cfg:
         raise RuntimeError('No configuration file specified.')
+    else:
+        experiment.log_asset(args.cfg, "cfg.yaml")
 
     cfg = Config(
         args.cfg,
@@ -146,7 +152,8 @@ def main(args):
         num_workers=args.num_workers,
         use_vdl=args.use_vdl,
         losses=losses,
-        keep_checkpoint_max=args.keep_checkpoint_max)
+        keep_checkpoint_max=args.keep_checkpoint_max,
+        experiment=experiment)
 
 
 if __name__ == '__main__':
