@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from comet_ml import Experiment
+from paddleseg.utils.comet_utils import CometLogger
 import argparse
 
 import paddle
@@ -91,14 +91,19 @@ def parse_args():
         dest='use_vdl',
         help='Whether to record the data to VisualDL during training',
         action='store_true')
+    parser.add_argument(
+        '--comet',
+        type=bool,
+        default=False,
+        help='enable comet logging (if comet installed)')
 
     return parser.parse_args()
 
 
 def main(args):
-    experiment = Experiment(auto_metric_logging=False)
-    experiment.log_others(vars(args))
-    experiment.log_code("./paddleseg/core/train.py")
+    comet_logger = CometLogger(args.comet, auto_metric_logging=False)
+    comet_logger.log_others(vars(args))
+    comet_logger.log_code("./paddleseg/core/train.py")
     env_info = get_sys_env()
     info = ['{}: {}'.format(k, v) for k, v in env_info.items()]
     info = '\n'.join(['', format('Environment Information', '-^48s')] + info +
@@ -112,7 +117,7 @@ def main(args):
     if not args.cfg:
         raise RuntimeError('No configuration file specified.')
     else:
-        experiment.log_asset(args.cfg, "cfg.yaml")
+        comet_logger.log_asset(args.cfg, "cfg.yaml")
 
     cfg = Config(
         args.cfg,
@@ -153,7 +158,7 @@ def main(args):
         use_vdl=args.use_vdl,
         losses=losses,
         keep_checkpoint_max=args.keep_checkpoint_max,
-        experiment=experiment)
+        comet_logger=comet_logger)
 
 
 if __name__ == '__main__':
