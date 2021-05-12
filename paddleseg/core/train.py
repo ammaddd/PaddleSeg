@@ -60,7 +60,8 @@ def train(model,
           num_workers=0,
           use_vdl=False,
           losses=None,
-          keep_checkpoint_max=5):
+          keep_checkpoint_max=5,
+          comet_logger=None):
     """
     Launch training.
 
@@ -131,11 +132,17 @@ def train(model,
     while iter < iters:
         for data in loader:
             iter += 1
+            epoch_num = (iter - 1) // iters_per_epoch + 1
             if iter > iters:
                 break
             reader_cost_averager.record(time.time() - batch_start)
             images = data[0]
             labels = data[1].astype('int64')
+            if iter % 300 == 0:
+                comet_logger.log_image(images[0].detach().cpu().numpy(),
+                                       name='train_images',
+                                       image_channels="first",
+                                       step=iter)
             edges = None
             if len(data) == 3:
                 edges = data[2].astype('int64')
@@ -166,6 +173,13 @@ def train(model,
                     avg_loss_list[i] += loss_list[i].numpy()
             batch_cost_averager.record(
                 time.time() - batch_start, num_samples=batch_size)
+            comet_logger.log_metric('Train/lr', lr, step=iter,
+                                    epoch=epoch_num)
+            comet_logger.log_metric('Train/loss', loss.numpy()[0],
+                                    step=iter, epoch=epoch_num)
+            for i, value in enumerate(avg_loss_list):
+                comet_logger.log_metric('Train/loss_'+str(i), value,
+                                        step=iter, epoch=epoch_num)
 
             if (iter) % log_iters == 0 and local_rank == 0:
                 avg_loss /= log_iters
@@ -218,6 +232,7 @@ def train(model,
                 paddle.save(optimizer.state_dict(),
                             os.path.join(current_save_dir, 'model.pdopt'))
                 save_models.append(current_save_dir)
+                comet_logger.log_model("PaddleSeg", current_save_dir)
                 if len(save_models) > keep_checkpoint_max > 0:
                     model_to_remove = save_models.popleft()
                     shutil.rmtree(model_to_remove)
@@ -230,6 +245,7 @@ def train(model,
                         paddle.save(
                             model.state_dict(),
                             os.path.join(best_model_dir, 'model.pdparams'))
+                        comet_logger.log_model("PaddleSeg", best_model_dir)
                     logger.info(
                         '[EVAL] The model with the best validation mIoU ({:.4f}) was saved at iter {}.'
                         .format(best_mean_iou, best_model_iter))
@@ -237,6 +253,10 @@ def train(model,
                     if use_vdl:
                         log_writer.add_scalar('Evaluate/mIoU', mean_iou, iter)
                         log_writer.add_scalar('Evaluate/Acc', acc, iter)
+                        comet_logger.log_metric('val_acc', acc, step=iter,
+                                                epoch=epoch_num)
+                        comet_logger.log_metric('val_mean_iou', mean_iou,
+                                                step=iter, epoch=epoch_num)
             batch_start = time.time()
 
     # Calculate flops.
